@@ -1,14 +1,27 @@
-#include <iostream>
-using namespace std;
+#include<iostream>
+#include<string.h>
+#include <boost/multiprecision/cpp_int.hpp>
+#include<math.h>
 
-int main(){
-	int ud = 56;
-	char ch = 'F';
-	int num;
-	// cout << "Enter the input :-";
-	// cin >> num;
-	// cout << ch << endl << ud;
-	// cout << num << endl;
-	string result = (5 > 0) ? "even" : "odd";
-	cout << sizeof(uint64_t) << endl << result;
+using namespace boost::multiprecision;
+int main ()
+{
+    int i, r, len;
+    cpp_int hex = 0;
+    std::string num = "ff";
+    len = num.length();
+    for (i = 0; num[i] != '\0'; i++)
+    {
+        len--;
+        if(num[i] >= '0' && num[i] <= '9')
+            r = num[i] - 48;
+        else if(num[i] >= 'a' && num[i] <= 'f')
+                r = num[i] - 87;
+             else if(num[i] >= 'A' && num[i] <= 'F')
+                    r = num[i] - 55;
+        hex += r * (1>>(4*len));
+    }
+    cpp_int x(12054665609558148674135238214546995030866431638448851553405637573786289454498006954545477123058909197546025903598033203527463111302977334328695645306522841);
+    std::cout << sizeof(cpp_int);
+    return 0;
 }
