@@ -330,6 +330,18 @@ class HashMapTable {
 		return key;
       }
 
+      int* values(){
+      	int* value = new int[length];
+      	int j=0;
+      	for(int i=0; i<T_S; i++){
+			if(t[i]!=NULL){
+				value[j]=t[i]->v;
+				j++; 
+			}
+		}
+		return value;
+      }
+
       void print(){
 		std::cout << "{ "; 
 		for(int i=0; i<T_S; i++){
@@ -480,15 +492,178 @@ T* root_factor(T g, T* primes, int primes_len, T N , int &rfactor_len){// , int 
  	return addarrays<T>(L, l_rfactor_len, R, r_rfactor_len);
  }
 
+
+cpp_int* batch_add(cpp_int A_pre_add, HashMapTable S, cpp_int* x_list, int x_list_len, cpp_int n){
+	cpp_int product = 1;
+	cpp_int* result = new cpp_int[3];
+	for(int i =0;i<x_list_len;i++){
+		if(S.SearchKey(x_list[i])==-1){
+			cpp_int* hash_prime_nonce = hash_to_prime<cpp_int>(x_list[i]);
+			S.Insert(x_list[i], int(hash_prime_nonce[1]));
+			product *= hash_prime_nonce[0];
+		}
+	}
+	cpp_int A_post_add = power<cpp_int>(A_pre_add, product, n);
+	cpp_int* pe_result = prove_exponentiation(A_pre_add, product, A_post_add, n);
+	result[0] = A_post_add;
+	result[1] = pe_result[0];
+	result[2] = pe_result[1];
+	return result; 
+}
+
+cpp_int Delete(cpp_int A0, cpp_int A, HashMapTable S, cpp_int x, cpp_int n){
+	if(S.SearchKey(x)==-1){
+		return A;
+	}
+	else{
+		S.Remove(x);
+		cpp_int product = 1;
+		cpp_int* key = S.keys();
+		int nonce;
+		cpp_int element;
+		for(int i=0;i<S.length;i++){
+			element = key[i];
+			nonce = S.SearchKey(element);
+			product *= hash_to_prime(element, ACCUMULATED_PRIME_SIZE, nonce)[0];
+		}
+		cpp_int Anew = power<cpp_int>(A0, product, n);
+		return Anew;
+	}
+}
+
+
+cpp_int batch_Delete(cpp_int A0, HashMapTable S, cpp_int* x_list, int x_list_len, cpp_int n){
+	for(int i=0;i<x_list_len;i++)
+		S.Remove(x_list[i]);
+		
+	if(S.length == 0){
+		return A0;
+	}
+	else{
+		cpp_int product = 1;
+		cpp_int* key = S.keys();
+		int nonce;
+		cpp_int element;
+		for(int i=0;i<S.length;i++){
+			element = key[i];
+			nonce = S.SearchKey(element);
+			product *= hash_to_prime(element, ACCUMULATED_PRIME_SIZE, nonce)[0];
+		}
+		cpp_int Anew = power<cpp_int>(A0, product, n);
+		return Anew;
+	}
+}
+
+cpp_int prove_membership(cpp_int A0, HashMapTable S, cpp_int x, cpp_int n){
+	if (S.SearchKey(x)==-1){
+		return -1;
+	}
+	else{
+		cpp_int element, product = 1;
+		int nonce;
+		cpp_int* key = S.keys();
+		for(int i=0;i<S.length;i++){
+			element = key[i];
+			if(element != x){
+				nonce = S.SearchKey(element);
+				product *= hash_to_prime(element, ACCUMULATED_PRIME_SIZE, nonce)[0];
+			}
+		}
+		cpp_int A = power<cpp_int>(A0, product, n);
+		return A;
+	}
+}
+
+cpp_int* prove_membership_with_NIPoE(cpp_int g, HashMapTable S, cpp_int x, cpp_int n, cpp_int w){
+	cpp_int* result = new cpp_int[3];
+	cpp_int u = prove_membership(g, S, x, n);
+	cpp_int* x_prime_nonce = hash_to_prime(x, 128, S.SearchKey(x));
+	cpp_int* Q_l_nonce = prove_exponentiation(u, x_prime_nonce[0], w, n);
+
+	result[0] = Q_l_nonce[0];
+	result[1] = Q_l_nonce[1];
+	result[2] = u;
+	return result;
+}
+
 template<typename T>
-T create_all_membership_witnesses(T A0,HashMapTable S,T n){
-	T* primes = new T[S.length];//[hash_to_prime(x=x, num_of_bits = ACCUMULATED_PRIME_SIZE, nonce=S[x])[0] for x in S.keys()]
+bool finElement(T* arr, int len, T element){
+	for(int i=0;i<len;i++){
+		if(arr[i]==element){
+			return true;
+		}
+	}
+	return false;
+}
+
+cpp_int batch_prove_membership(cpp_int A0, HashMapTable S, cpp_int* x_list, int x_list_len, cpp_int n){
+	cpp_int product = 1;
+	cpp_int* key = S.keys();
+	cpp_int element;
+	int nonce;
+	for(int i =0;i<S.length;i++){
+		if(finElement<cpp_int>(x_list, x_list_len, element)){
+			nonce = S.SearchKey(element);
+			product *= hash_to_prime(element, ACCUMULATED_PRIME_SIZE, nonce)[0];
+		}
+	}
+	cpp_int A = power<cpp_int>(A0, product, n);
+	return A;
+}
+
+cpp_int dunder_calculate_primes_product(cpp_int* x_list, int x_list_len, int* nonce_list, int nonce_list_len){
+	if(x_list_len != nonce_list_len)
+		return -1;
+	
+	cpp_int* primes_list = new cpp_int[x_list_len];// [hash_to_prime(x, nonce=nonce_list[i])[0] for i, x in enumerate(x_list)]
+	for(int i=0;i<x_list_len;i++)
+		primes_list[i] = hash_to_prime(x_list[i], 128, nonce_list[i])[0];
+	cpp_int product = calculate_product<cpp_int>(primes_list, x_list_len);
+	return product;
+}
+
+cpp_int* batch_prove_membership_with_NIPoE(cpp_int A0, HashMapTable S, cpp_int* x_list, int x_list_len, cpp_int n, cpp_int w){
+	cpp_int* result = new cpp_int[3];
+	cpp_int u = batch_prove_membership(A0, S, x_list, x_list_len, n);
+	int* nonce_list = S.values();
+	cpp_int product = dunder_calculate_primes_product(x_list, x_list_len, nonce_list, S.length);
+	cpp_int* Q_l_nonce = prove_exponentiation(u, product, w, n);
+	result[0] = Q_l_nonce[0];
+	result[1] = Q_l_nonce[1];
+	result[2] = u;
+	return result;
+}
+
+bool dunder_verify_membership(cpp_int A, cpp_int x, cpp_int proof, cpp_int n){
+	return power<cpp_int>(proof, x, n) == A;
+}
+
+bool verify_membership(cpp_int A, cpp_int x, int nonce, cpp_int proof, cpp_int n){
+	return dunder_verify_membership(A, hash_to_prime(x, ACCUMULATED_PRIME_SIZE, nonce)[0], proof, n);
+}
+
+bool batch_verify_membership(cpp_int A,cpp_int* x_list, int x_list_len, int* nonce_list, int nonce_list_len, cpp_int proof, cpp_int n){
+	cpp_int product = dunder_calculate_primes_product(x_list, x_list_len, nonce_list, nonce_list_len);
+	return dunder_verify_membership(A, product, proof, n);
+}
+
+bool batch_verify_membership_with_NIPoE(cpp_int Q, int l_nonce, cpp_int u, cpp_int* x_list, int x_list_len, int* nonce_list, int nonce_list_len, cpp_int w, cpp_int n){
+	cpp_int product = dunder_calculate_primes_product(x_list, x_list_len, nonce_list, nonce_list_len);
+	return dunder_verify_exponentiation<cpp_int>(Q, l_nonce, u, product, w, n);	
+}
+
+template<typename T>
+T* create_all_membership_witnesses(T A0, HashMapTable S, T n){
+	T* primes = new T[S.length];
 	cpp_int* key = S.keys();
 	for(int i=0;i<S.length;i++)
-		primes[i] = hash_to_prime(key[i], ACCUMULATED_PRIME_SIZE, S[key[i]])[0];
+		primes[i] = hash_to_prime(key[i], ACCUMULATED_PRIME_SIZE, S.SearchKey(key[i]))[0];
 	// printArray(primes)
-	return root_factor(A0, primes, n);
+	int rfactor_len=0;
+	return root_factor(A0, primes, S.length, n, rfactor_len);
 }
+
+
 
 int main(){
 	int* x = new int[6];
@@ -510,6 +685,7 @@ int main(){
 	int* y = root_factor<int>(55, x, 6, 51, len);
 	std::cout << len << std::endl;
 	printArray(y, len); 
+	std::cout << finElement<int>(x, 6, 2) << std::endl;
 	// HashMapTable hash;
 	// cpp_int k = rand_gen<cpp_int>();
 	// int v = 59;
