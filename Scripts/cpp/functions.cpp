@@ -4,7 +4,9 @@
 #include <cstdlib>
 #include <vector>
 #include <map>
+#include <list>
 #include <cmath>
+#include<cstdio>
 #include <string>
 #include <algorithm>
 #include <bits/stdc++.h>
@@ -186,10 +188,10 @@ std::string concat(std::vector<std::string> strArray){
 }
 
 template<typename T>
-T calculate_product(std::vector<T> lst){
+T calculate_product(T* lst, int len){
     T i = 1;
-    for(T j: lst)
-        i *= j;
+    for(int j=0;j<len;j++)
+        i *= lst[j];
     return i;
 }
 
@@ -253,6 +255,99 @@ T shamir_trick(T pi1, T pi2, T x1, T x2, T n){
     return pi;
 }
 
+int T_S = 200;
+
+class HashTableEntry {
+   public:
+      cpp_int k;
+      int v;
+      HashTableEntry(cpp_int k, int v) {
+         this->k= k;
+         this->v = v;
+      }
+};
+class HashMapTable {
+   private:
+      HashTableEntry **t;
+   public:
+   		int length=0;
+      HashMapTable() {
+         t = new HashTableEntry * [T_S];
+         for (int i = 0; i< T_S; i++) {
+            t[i] = NULL;
+         }
+      }
+      int HashFunc(cpp_int k) {
+         return int(k % cpp_int(T_S));
+      }
+      void Insert(cpp_int k, int v) {
+         int h = HashFunc(k);
+         std::cout << h << std::endl;
+         while (t[h] != NULL && t[h]->k != k) {
+            h = HashFunc(h + 1);
+         }
+         if (t[h] != NULL)
+            delete t[h];
+         t[h] = new HashTableEntry(k, v);
+         length++;
+      }
+      int SearchKey(cpp_int k) {
+         int h = HashFunc(k);
+         while (t[h] != NULL && t[h]->k != k) {
+            h = HashFunc(h + 1);
+         }
+         if (t[h] == NULL)
+            return -1;
+         else
+            return t[h]->v;
+      }
+      void Remove(cpp_int k) {
+         int h = HashFunc(k);
+         while (t[h] != NULL) {
+            if (t[h]->k == k)
+               break;
+            h = HashFunc(h + 1);
+         }
+         if (t[h] == NULL) {
+            std::cout<<"No Element found at key "<<k<<std::endl;
+            return;
+         } else {
+            delete t[h];
+         }
+         length--;
+         std::cout<<"Element Deleted"<<std::endl;
+      }
+
+      cpp_int* keys(){
+      	cpp_int* key = new cpp_int[length];
+      	int j=0;
+      	for(int i=0; i<T_S; i++){
+			if(t[i]!=NULL){
+				key[j]=t[i]->k;
+				j++; 
+			}
+		}
+		return key;
+      }
+
+      void print(){
+		std::cout << "{ "; 
+		for(int i=0; i<T_S; i++){
+			if(t[i]!=NULL)
+				std::cout << t[i]->k << ":" << t[i]->v << ", "; 
+		}
+		std::cout << "\b}" << std::endl;
+      }
+
+      ~HashMapTable() {
+         for (int i = 0; i < T_S; i++) {
+            if (t[i] != NULL)
+               delete t[i];
+            delete[] t;
+         }
+      }
+};
+
 template<typename T>
 T* create_list(int size){
     T *res = new T[size];
@@ -262,23 +357,186 @@ T* create_list(int size){
     return res;
 }
 
-// std::std::map<cpp_int, int> setup(cpp_int* n, cpp_int* A0){
-//     cpp_int* primes = generate_two_distinct_primes(RSA_PRIME_SIZE);
-//     n = primes[0]*primes[0];
 
-//     A0 = 
-// }
 
+HashMapTable setup(cpp_int &n, cpp_int &A0){
+    cpp_int* primes = generate_two_distinct_primes(RSA_PRIME_SIZE);
+    n = primes[0]*primes[1];
+
+    A0 = cpp_int(std::rand());
+    HashMapTable S;
+    return S;
+}
+
+cpp_int add(cpp_int A, HashMapTable &S, cpp_int x, cpp_int n){
+	if(S.SearchKey(x)!=-1)
+		return A;
+	else{
+		cpp_int* hp_nonce;
+		hp_nonce = hash_to_prime(x, ACCUMULATED_PRIME_SIZE);
+		A = power(A, hp_nonce[0], n);
+		S.Insert(x, int(hp_nonce[1]));
+		return A;
+	}
+
+}
+
+template<typename T>
+T concat_int(T a, T b, T c){
+	T Ndigit_b = 1;
+	T Ndigit_c = 1;
+	while(Ndigit_b<=b)	Ndigit_b*=10;
+	while(Ndigit_c<=c)	Ndigit_c*=10;
+	return T(Ndigit_b*Ndigit_c)*a + T(Ndigit_c)*b + c;
+}
+
+template<typename T>
+T* prove_exponentiation(T u, T x, T w, T n){
+	T* l_nonce = hash_to_prime(concat_int<T>(x, u, w));
+	T q = T(x/l_nonce[0]);
+	T* result = new T[2];
+	result[0] = power<T>(u, q, n);
+	result[1] = l_nonce[1];
+	return result;
+}
+
+template<typename T>
+bool dunder_verify_exponentiation(T Q, int l_nonce, T u, T x , T w, T n){
+	T l = hash_to_prime(concat_int<T>(x, u, w), 128, int(l_nonce))[0];
+	T r = x % l;
+	return ((power(Q, l, n) % n) * (power(u, r, n) % n) % n) == w;
+}
+
+template<typename T>
+bool verify_exponentiation(T Q, int l_nonce, T u, T x , int x_nonce, T w , T n){
+	x = hash_to_prime<T>(x, 128, x_nonce)[0];
+	return dunder_verify_exponentiation<T>(Q, l_nonce, u, x, w, n);
+}
+
+
+template<typename T>
+T* subarr(T* arr, int len, int start, int end){
+	T* subarr = new T[end-start];
+	int j = 0;
+	for(int i=0; i<len; i++){
+		if(i>=start && i < end){
+			subarr[j] = arr[i];
+			j++;
+		}
+	}
+	return subarr;
+}
+
+template<typename T>
+T* addarrays(T* a, int a_len, T* b, int b_len){
+	int new_len = a_len+b_len;
+	T* newarr = new T[new_len];
+	for(int i=0;i<new_len;i++){
+		if(i<a_len)
+			newarr[i] = a[i];
+		else
+			newarr[i] = b[i-a_len];
+	}
+	return newarr;
+}
+
+template<typename T>
+void printArray(T* arr, int len){
+	std::cout << "{";
+	for(int i=0;i<len;i++)
+		std::cout<<arr[i]<<",";
+	std::cout << "}" << std::endl;
+}
+
+template<typename T>
+T* root_factor(T g, T* primes, int primes_len, T N , int &rfactor_len){// , int &l_rfactor_len, int &r_rfactor_len){
+	int n = primes_len;
+	if(n == 1){
+		rfactor_len+=1;
+		T* G = new T[1];
+		G[0] = g;
+		return G;
+	}
+		
+	int n_tag = n / 2;
+	std::cout << n_tag << std::endl;
+	T* primes_L = subarr<T>(primes, primes_len, 0, n_tag);
+	T product_L = calculate_product<T>(primes_L, n_tag);
+	// std::cout << "product_L " << product_L << std::endl;
+	T g_L = power<T>(g, product_L, N);
+	// std::cout << "g_L " << g_L << std::endl;
+	
+	T* primes_R = subarr<T>(primes, primes_len, n_tag, n);
+	T product_R = calculate_product<T>(primes_R, n-n_tag);
+	// std::cout << "product_R " << product_R << std::endl;
+	T g_R = power<T>(g, product_R, N);
+	// std::cout << "g_R " << g_R << std::endl;
+	int l_rfactor_len = 0;
+	int r_rfactor_len = 0;
+	T* L = root_factor<T>(g_R, primes_L, n_tag, N, l_rfactor_len);//, l_rfactor_len, l_rfactor_len);
+	T* R = root_factor<T>(g_L, primes_R, n-n_tag, N, r_rfactor_len);//, r_rfactor_len, r_rfactor_len);
+	rfactor_len = l_rfactor_len + r_rfactor_len;
+	
+ 	return addarrays<T>(L, l_rfactor_len, R, r_rfactor_len);
+ }
+
+template<typename T>
+T create_all_membership_witnesses(T A0,HashMapTable S,T n){
+	T* primes = new T[S.length];//[hash_to_prime(x=x, num_of_bits = ACCUMULATED_PRIME_SIZE, nonce=S[x])[0] for x in S.keys()]
+	cpp_int* key = S.keys();
+	for(int i=0;i<S.length;i++)
+		primes[i] = hash_to_prime(key[i], ACCUMULATED_PRIME_SIZE, S[key[i]])[0];
+	// printArray(primes)
+	return root_factor(A0, primes, n);
+}
 
 int main(){
+	int* x = new int[6];
+	x[0] = 2;
+	x[1] = 3;
+	x[2] = 5;
+	x[3] = 7;
+	x[4] = 11;
+	x[5] = 13;
+	int* s = subarr(x, 6, 2, 4);
+	for(int i=0;i<2;i++);
+		// std::cout << s[i] << std::endl;
+	int* n = addarrays(x, 6, s, 2);
+	printArray<int>(n, 8);
+	int len, l_len, r_len;
+	len = 0;
+	l_len = 0;
+	r_len = 0;
+	int* y = root_factor<int>(55, x, 6, 51, len);
+	std::cout << len << std::endl;
+	printArray(y, len); 
+	// HashMapTable hash;
+	// cpp_int k = rand_gen<cpp_int>();
+	// int v = 59;
+	// hash.Insert(k, v);
+	// cpp_int k1 = rand_gen<cpp_int>();
+	// int v1 = 85541359;
+	// cpp_int k2 = rand_gen<cpp_int>();
+	// int v2 = 99;
+	// hash.Insert(k1, v1);
+	// hash.Insert(k2, v2);
+	// hash.Remove(k1);
+	// std::cout << hash.SearchKey(k1) << std::endl;
+	// hash.print();
+    // cpp_int* res = create_list<cpp_int>(10);
+    // std:cout << res[0] << std::endl;
+ //    cpp_int n, A0;
+ //    HashMapTable S = setup(n, A0);
+ //    cpp_int x  = std::rand();
+	// cpp_int A1 = add(A0, S, x, n);
+	// S.print();
+	// std::cout << A0 << std::endl << A1 << std::endl;
 
-
-    //cpp_int* res = create_list<cpp_int>(10);
-    cpp_int x;
-    cpp_int lim = 100;
-    for(int i=0;i<10;i++){
-        x = randbelow<cpp_int>(lim);
-        std::cout << x << " "  << x<= lim << std::endl;
-    }
+    // cpp_int x;
+    // cpp_int lim = 100;
+    // for(int i=0;i<10;i++){
+    //     x = std::rand();
+    //     std::cout << x << " "  << (x<= lim) << std::endl;
+    // }
     return 0;
 }
