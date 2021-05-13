@@ -1,27 +1,55 @@
+//#include "functions.h"
+
 #include <iostream>
 #include <cstdlib>
 #include <vector>
+#include <map>
 #include <cmath>
 #include <string>
 #include <algorithm>
 #include <bits/stdc++.h>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/hex.hpp>
+#include <boost/convert.hpp>
+#include <boost/convert/stream.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/random.hpp>
-#include "hash-library/sha256.h"
+#include "sha256.h"
 
-
+using boost::convert;
 using namespace boost::multiprecision;
 using namespace boost::algorithm;
 using namespace boost::random;
 
+ 
+struct boost::cnv::by_default : public boost::cnv::cstream {};
+
+int RSA_KEY_SIZE  =2048;
+int ACCUMULATED_PRIME_SIZE= 128;
+int RSA_PRIME_SIZE = 1024;
 
 
+template<typename T>
+T rand_gen(){
+    typedef independent_bits_engine<mt19937, 256, T> generator_type;
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    
+    generator_type gen(seed);
+    return gen();
+}
 
-cpp_int power(cpp_int x, cpp_int y, cpp_int p)
+template<typename T>
+cpp_int randbelow(T ulim, T llim=0){
+    mt19937 mt;
+    uniform_int_distribution<cpp_int> ui((cpp_int(llim+1) << 256), cpp_int(ulim-1) << 256);
+
+    return ui(mt);
+}
+
+template<typename T>
+T power(T x, T y, T p)
 {
-    cpp_int res = 1; 
+    T res = 1; 
     x = x % p;  
 
     while (y > 0)
@@ -82,13 +110,27 @@ bool is_prime(cpp_int num){
 }
 
 cpp_int generate_large_prime(int num_of_bits){       // Parameterise num_of_bits
-    typedef independent_bits_engine<mt19937, 16, cpp_int> generator_type;
-    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-    generator_type gen(seed);
-    while(true){
-        cpp_int num = gen();
-        if(is_prime(num))
-            return num;
+    typedef independent_bits_engine<mt19937, 1024, cpp_int> generator_type1;
+    typedef independent_bits_engine<mt19937, 256, cpp_int> generator_type2;
+    if(num_of_bits > 256){
+        
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        generator_type1 gen1(seed);
+        while(true){
+            cpp_int num = gen1();
+            if(is_prime(num))
+                return num;
+        }
+    }
+    else{
+        
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        generator_type2 gen2(seed);
+        while(true){
+            cpp_int num = gen2();
+            if(is_prime(num))
+                return num;
+        }
     }
 }
 
@@ -105,28 +147,6 @@ cpp_int* generate_two_distinct_primes(int num_of_bits){
             return result;
     }
 }
-
-// template <typename T>
-// T* xgcd(T b, T a){
-//     T prevx, x, prevy, y, q, r;
-//     T* result = new T[3];
-//     prevx = 1;
-//     x = 0;
-//     prevy = 0;
-//     y = 1;
-
-//     while(a!=0){
-//         q, r = floor(b/a);
-//         tie(x, prevx) = make_tuple(prevx - q*x, x);
-//         tie(y, prevy) = make_tuple(prevy - q*y, y);
-//         b, a = a, r;
-//     }
-//     result[0] = b;
-//     result[1] = prevx;
-//     result[2] = prevy;
-
-//     return result;
-// }
 
 
 template <typename T>
@@ -173,115 +193,92 @@ T calculate_product(std::vector<T> lst){
     return i;
 }
 
-cpp_int to_cpp_int(std::string num){
-    cpp_int hex=0;
-    int i, r;
-    int len = num.length();
-    if(num.substr(1,2)=="0x"||num.substr(1,2)=="0X")
-        num = num.substr(3,len);
-    // for(int j=0;j<len;j++){
-            
-    //     if(strcmp(str[j], '1'))
-    //         i+=(1>>4*j);
-    //     else if(str[j].compare("2"))
-    //         i+=2*(1>>4*j);        
-    //     else if(str[j].compare("3"))
-    //         i+=3*(1>>4*j);        
-    //     else if(str[j].compare("4"))
-    //         i+=4*(1>>4*j);        
-    //     else if(str[j].compare("5"))
-    //         i+=5*(1>>4*j);        
-    //     else if(str[j].compare("6"))
-    //         i+=6*(1>>4*j);        
-    //     else if(str[j].compare("7"))
-    //         i+=7*(1>>4*j);        
-    //     else if(str[j].compare("8"))
-    //         i+=8*(1>>4*j);        
-    //     else if(str[j].compare("9"))
-    //         i+=9*(1>>4*j);        
-    //     else if(str[j].compare("a")||str[j].compare("A"))
-    //         i+=10*(1>>4*j);        
-    //     else if(str[j].compare("b")||str[j].compare("B"))
-    //         i+=11*(1>>4*j);
-    //     else if(str[j].compare("c")||str[j].compare("C"))
-    //         i+=12*(1>>4*j);
-    //     else if(str[j].compare("d")||str[j].compare("D"))
-    //         i+=13*(1>>4*j);
-    //     else if(str[j].compare("e")||str[j].compare("E"))
-    //         i+=14*(1>>4*j);
-    //     else if(str[j].compare("f")||str[j].compare("F"))
-    //         i+=15*(1>>4*j);
-        
-    // }
-    // return i;
-
-    for (i = 0; num[i] != '\0'; i++)
-    {
-        len--;
-        if(num[i] >= '0' && num[i] <= '9')
-            r = num[i] - 48;
-        else if(num[i] >= 'a' && num[i] <= 'f')
-                r = num[i] - 87;
-             else if(num[i] >= 'A' && num[i] <= 'F')
-                    r = num[i] - 55;
-        hex += r * (1>>4*len);
-    }
-    return hex;
-}
 
 template<typename T>
 cpp_int hash_to_length(T x, int num_of_bits){
-    //using boost::convert;
 
+    boost::cnv::cstream ccnv;
     SHA256 sha256;
-    //boost::cnv::cstream ccnv;
 
-    int num_of_blocks = ceil(num_of_bits/256);
+    double num_of_blocks = ceil((double)num_of_bits/256);
     std::string pseudo_random_hex_string;
-    std::cout << (pseudo_random_hex_string=="") << std::endl;
     for(int i=0;i<num_of_blocks;i++){
-        //pseudo_random_hex_string = pseudo_random_hex_string + sha256(convert<std::string>( x+i, ccnv(std::hex)).value_or(NULL));
+
         pseudo_random_hex_string.append(sha256(boost::lexical_cast<std::string>(x+i))); 
     }
     int r = num_of_bits%256;
     if(r>0)
-        pseudo_random_hex_string = pseudo_random_hex_string[(int)(r/4)];
-    std::cout << pseudo_random_hex_string << std::endl;
-    // T length = convert<int>(pseudo_random_hex_string, ccnv(std::hex)(std::skipws)).value_or(-1);
-    //T value = boost::lexical_cast<T>(pseudo_random_hex_string);
-    cpp_int value = to_cpp_int(pseudo_random_hex_string);
+        pseudo_random_hex_string = pseudo_random_hex_string.substr((int)(r/4), pseudo_random_hex_string.length());
+
+
+    cpp_int value=convert<cpp_int>(pseudo_random_hex_string, ccnv(std::hex)(std::skipws)).value_or(0);;
+
     return value;
 }
 
+template<typename T>
+cpp_int* hash_to_prime(T x, int num_of_bits=128, int nonce=0){
+    cpp_int* num = new cpp_int[2];
+    while(true){
+        num[0] = hash_to_length<T>(x + nonce, num_of_bits);
+        if(is_prime(num[0])){
+            num[1] = nonce;
+            return num;
+        }
+        nonce++;
+    }
+}
+
+template<typename T>
+T shamir_trick(T pi1, T pi2, T x1, T x2, T n){
+    T* bzc = bezout_coefficients<T>(x1, x2);
+    T positive_a, positive_b, inverse_pi1, inverse_pi2, power1, power2, pi;
+    if(bzc[0] < 0){
+        positive_a = -1*bzc[0];
+        inverse_pi2 = mul_inv<T>(pi2, n);
+        power1 = power<T>(pi1, bzc[1], n);
+        power2 = power<T>(inverse_pi2, positive_a, n);
+    }
+    else if(bzc[1] > 0){
+        positive_b = -1*bzc[1];
+        inverse_pi1 = mul_inv<T>(pi1, n);
+        power1 = power<T>(inverse_pi1, positive_b, n);
+        power2 = power<T>(pi2, bzc[0], n);
+    }
+    else{
+        power1 = power<T>(pi1, bzc[1], n);
+        power2 = power<T>(pi2, bzc[0], n);
+    }
+    pi = power1*power2;
+    return pi;
+}
+
+template<typename T>
+T* create_list(int size){
+    T *res = new T[size];
+    for(int i =0; i<size;i++){
+        res[i]=(rand_gen<T>());
+    }
+    return res;
+}
+
+// std::std::map<cpp_int, int> setup(cpp_int* n, cpp_int* A0){
+//     cpp_int* primes = generate_two_distinct_primes(RSA_PRIME_SIZE);
+//     n = primes[0]*primes[0];
+
+//     A0 = 
+// }
+
+
 int main(){
-    // for(int i=0;i<6;i++)
-    //     std::cout << generate_large_prime(10) << std::endl;
-    // std::cout << sizeof(long long) << std::endl;
-    // cpp_int* result = generate_two_distinct_primes(10);
-    // std::cout <<  result[0] << std::endl <<result[1] <<std::endl;
-    // int result[3];
-    // result[0] = xGCD<int>(99, 78, result[1], result[2]);
-    // std::cout << result[0] << ' ' << result[1] << ' ' << result[2] << std::endl;
-    // int x = mul_inv(3, 17);
-    // std::cout << x << std::endl;
-    // int* r = bezout_coefficients<int>(55,15);
-    // std::cout << r[0]  << ' ' <<r[1]<< std::endl; 
-    // std::vector<std::string> str = {"swaroop","swarupa","Rithanyaa","Srivathsava"};
-    // std::cout << concat(str) << std::endl;
-    // int r = calculate_product<int>(std::vector<int>{1,2,3,4,5});
-    // std::cout << r << std::endl;
-    std::cout << hash_to_length<cpp_int>(15, 128) << std::endl;
 
-    /* Passing integer vector Arr to the hex function,
-    ** this function expects an iterator to write the
-    ** resultant hexadecimal value, so we attached
-    ** output stream iterator to directly print the value
-    */
-    //std::string x = "e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb";
-    //std::cout << x.length()<< std::endl;
-    //cpp_int          i(x);
-    //std::cout << i<< std::endl;
+
+    //cpp_int* res = create_list<cpp_int>(10);
+    cpp_int x;
+    cpp_int lim = 100;
+    for(int i=0;i<10;i++){
+        x = randbelow<cpp_int>(lim);
+        std::cout << x << " "  << x<= lim << std::endl;
+    }
     return 0;
-      // create a new hashing object
-
 }
