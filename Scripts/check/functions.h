@@ -1,12 +1,17 @@
+
+
+
 //#include "functions.h"
 
 #include <iostream>
 #include <cstdlib>
 #include <vector>
 #include <map>
+#include <thread>
+#include <pthread.h>
 #include <list>
 #include <cmath>
-#include<cstdio>
+#include <cstdio>
 #include <string>
 #include <algorithm>
 #include <bits/stdc++.h>
@@ -16,7 +21,8 @@
 #include <boost/convert/stream.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/random.hpp>
-#include "sha256.h"
+// #include "sha256.h"
+#include <openssl/sha.h>
 
 using boost::convert;
 using namespace boost::multiprecision;
@@ -30,6 +36,26 @@ int RSA_KEY_SIZE  =2048;
 int ACCUMULATED_PRIME_SIZE= 128;
 int RSA_PRIME_SIZE = 1024;
 
+
+std::string to_hex(unsigned char s) {
+    std::stringstream ss;
+    ss << std::hex << (int) s;
+    return ss.str();
+}   
+
+std::string sha256(std::string line) {    
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, line.c_str(), line.length());
+    SHA256_Final(hash, &sha256);
+
+    std::string output = "";    
+    for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        output += to_hex(hash[i]);
+    }
+    return output;
+}
 
 template<typename T>
 T rand_gen(){
@@ -64,6 +90,7 @@ T power(T x, T y, T p)
     }
     return res;
 }
+
 
 bool rabin_muller(cpp_int num){
     cpp_int s = num-1;
@@ -188,19 +215,37 @@ std::string concat(std::vector<std::string> strArray){
 }
 
 template<typename T>
-T calculate_product(T* lst, int len){
+T calculate_product(T* lst, int start, int end){
     T i = 1;
-    for(int j=0;j<len;j++)
+    for(int j=start;j<=end;j++)
         i *= lst[j];
     return i;
 }
+
+
+// void product_of_list(cpp_int &i, cpp_int* lst, int start, int end){
+//     for(int j=start;j<=end;j++)
+//         i *= lst[j];
+// }
+// template<typename T>
+// T calculate_product(T* lst, int start, int end){
+//     T i = 1, k=1;
+//     int mid = start + (end-start)/2;
+//     // for(int j=start;j<=end;j++)
+//     //     i *= lst[j];
+//     std::thread t1(product_of_list, i, lst, start, mid);
+//     std::thread t2(product_of_list, k, lst, mid+1, end);
+//     t1.join();
+//     t2.join();
+//     return i*k;
+// }
 
 
 template<typename T>
 cpp_int hash_to_length(T x, int num_of_bits){
 
     boost::cnv::cstream ccnv;
-    SHA256 sha256;
+    // SHA256 sha256;
 
     double num_of_blocks = ceil((double)num_of_bits/256);
     std::string pseudo_random_hex_string;
@@ -255,7 +300,7 @@ T shamir_trick(T pi1, T pi2, T x1, T x2, T n){
     return pi;
 }
 
-int T_S = 200;
+int T_S = 1000;
 
 class HashTableEntry {
    public:
@@ -282,7 +327,7 @@ class HashMapTable {
       }
       void Insert(cpp_int k, int v) {
          int h = HashFunc(k);
-         std::cout << h << std::endl;
+         // std::cout << h << std::endl;
          while (t[h] != NULL && t[h]->k != k) {
             h = HashFunc(h + 1);
          }
@@ -461,37 +506,123 @@ void printArray(T* arr, int len){
 	std::cout << "}" << std::endl;
 }
 
-template<typename T>
-T* root_factor(T g, T* primes, int primes_len, T N , int &rfactor_len){
-	int n = primes_len;
-	if(n == 1){
-		rfactor_len+=1;
-		T* G = new T[1];
-		G[0] = g;
-		return G;
-	}
+// template<typename T>
+// T* root_factor(T g, T* primes, int primes_len, T N , int &rfactor_len){
+// 	int n = primes_len;
+// 	if(n == 1){
+// 		rfactor_len+=1;
+// 		T* G = new T[1];
+// 		G[0] = g;
+// 		return G;
+// 	}
 		
-	int n_tag = n / 2;
-	T* primes_L = subarr<T>(primes, primes_len, 0, n_tag);
-	T product_L = calculate_product<T>(primes_L, n_tag);
-	// std::cout << "product_L " << product_L << std::endl;
-	T g_L = power<T>(g, product_L, N);
-	// std::cout << "g_L " << g_L << std::endl;
+// 	int n_tag = n / 2;
+// 	T* primes_L = subarr<T>(primes, primes_len, 0, n_tag);
+// 	T product_L = calculate_product<T>(primes_L, n_tag);
+// 	// std::cout << "product_L " << product_L << std::endl;
+// 	T g_L = power<T>(g, product_L, N);
+// 	// std::cout << "g_L " << g_L << std::endl;
 	
-	T* primes_R = subarr<T>(primes, primes_len, n_tag, n);
-	T product_R = calculate_product<T>(primes_R, n-n_tag);
-	// std::cout << "product_R " << product_R << std::endl;
-	T g_R = power<T>(g, product_R, N);
-	// std::cout << "g_R " << g_R << std::endl;
-	int l_rfactor_len = 0;
-	int r_rfactor_len = 0;
-	T* L = root_factor<T>(g_R, primes_L, n_tag, N, l_rfactor_len);
-	T* R = root_factor<T>(g_L, primes_R, n-n_tag, N, r_rfactor_len);
-	rfactor_len = l_rfactor_len + r_rfactor_len;
-	
- 	return addarrays<T>(L, l_rfactor_len, R, r_rfactor_len);
- }
+// 	T* primes_R = subarr<T>(primes, primes_len, n_tag, n);
+// 	T product_R = calculate_product<T>(primes_R, n-n_tag);
+// 	// std::cout << "product_R " << product_R << std::endl;
+// 	T g_R = power<T>(g, product_R, N);
+// 	// std::cout << "g_R " << g_R << std::endl;
+// 	int l_rfactor_len = 0;
+// 	int r_rfactor_len = 0;
+// 	T* L = root_factor<T>(g_R, primes_L, n_tag, N, l_rfactor_len);
+// 	T* R = root_factor<T>(g_L, primes_R, n-n_tag, N, r_rfactor_len);
+// 	rfactor_len = l_rfactor_len + r_rfactor_len;
 
+//  	return addarrays<T>(L, l_rfactor_len, R, r_rfactor_len);
+//  }
+
+
+void root_factor(cpp_int* array, cpp_int g, cpp_int* primes, int start, int end, cpp_int N){
+	if(start==end){
+		array[start] = g;
+		return;
+	}
+	int mid =  start + (end-start)/2;
+	if(end>start){
+        // std::chrono::time_point<std::chrono::system_clock> tik, tok;
+        // tik = std::chrono::system_clock::now();
+		cpp_int product_L = calculate_product<cpp_int>(primes, start, mid);
+		cpp_int product_R = calculate_product<cpp_int>(primes, mid+1, end);
+		cpp_int g_L = power<cpp_int>(g, product_L, N);
+		cpp_int g_R = power<cpp_int>(g, product_R, N);
+        // tok = std::chrono::system_clock::now();
+        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(tok - tik);
+        // std::cout << duration.count()*1e-6<< std::endl;
+		root_factor(array, g_R, primes, start, mid, N);
+		root_factor(array, g_L, primes, mid+1, end, N);
+	}
+}
+
+// void root_factor(cpp_int* array, cpp_int g, cpp_int* primes, int start, int end, cpp_int N){
+//     if(start==end){
+//         array[start] = g;
+//         return;
+//     }
+//     int mid =  start + (end-start)/2;
+//     if(end>start){
+//         cpp_int product_L = calculate_product<cpp_int>(primes, start, mid);
+//         cpp_int product_R = calculate_product<cpp_int>(primes, mid+1, end);
+//         cpp_int g_L = power<cpp_int>(g, product_L, N);
+//         cpp_int g_R = power<cpp_int>(g, product_R, N);
+
+//         std::thread t1(root_factor, g_R, primes, start, mid, N);
+//         std::thread t2(root_factor, g_L, primes, mid+1, end, N);
+
+//         t1.join();
+//         t2.join();
+//         // root_factor(array, g_R, primes, start, mid, N);
+//         // root_factor(array, g_L, primes, mid+1, end, N);
+//     }
+// }
+
+// cpp_int* root_factor(cpp_int g, cpp_int* primes, int primes_len, cpp_int N , int &rfactor_len){
+// 	int n = primes_len;
+// 	if(n == 1){
+// 		rfactor_len+=1;
+// 		cpp_int* G = new cpp_int[1];
+// 		G[0] = g;
+// 		return G;
+// 	}
+		
+// 	int n_tag = n / 2;
+// 	cpp_int* primes_L = subarr<cpp_int>(primes, primes_len, 0, n_tag);
+// 	cpp_int product_L = calculate_product<cpp_int>(primes_L, n_tag);
+// 	// std::cout << "product_L " << product_L << std::endl;
+// 	cpp_int g_L = power<cpp_int>(g, product_L, N);
+// 	// std::cout << "g_L " << g_L << std::endl;
+	
+// 	cpp_int* primes_R = subarr<cpp_int>(primes, primes_len, n_tag, n);
+// 	cpp_int product_R = calculate_product<cpp_int>(primes_R, n-n_tag);
+// 	// std::cout << "product_R " << product_R << std::endl;
+// 	cpp_int g_R = power<cpp_int>(g, product_R, N);
+// 	// std::cout << "g_R " << g_R << std::endl;
+// 	int l_rfactor_len = 0;
+// 	int r_rfactor_len = 0;
+// 	std::future<cpp_int* > L_thread = std::async(std::launch::async, root_factor, g_R, primes_L, n_tag, N, l_rfactor_len);
+// 	// T* L = root_factor<T>(g_R, primes_L, n_tag, N, l_rfactor_len);
+// 	cpp_int* R = root_factor(g_L, primes_R, n-n_tag, N, r_rfactor_len);
+// 	cpp_int* L = L_thread.get();
+// 	rfactor_len = l_rfactor_len + r_rfactor_len;
+
+//  	return addarrays<cpp_int>(L, l_rfactor_len, R, r_rfactor_len);
+//  }
+
+void multi_thread_add(cpp_int &product, HashMapTable &S, int start, int end){
+    cpp_int* hash_prime_nonce;
+    for(int i=start;i<=end;i++){
+        if(S.SearchKey(x_list[i])==-1){
+            hash_prime_nonce = hash_to_prime<cpp_int>(x_list[i]);
+            S.Insert(x_list[i], int(hash_prime_nonce[1]));
+            product *= hash_prime_nonce[0];
+        }
+    }
+}
 
 cpp_int* batch_add(cpp_int A_pre_add, HashMapTable &S, cpp_int* x_list, int x_list_len, cpp_int n){
 	cpp_int product = 1;
@@ -621,7 +752,7 @@ cpp_int dunder_calculate_primes_product(cpp_int* x_list, int x_list_len, int* no
 	cpp_int* primes_list = new cpp_int[x_list_len];// [hash_to_prime(x, nonce=nonce_list[i])[0] for i, x in enumerate(x_list)]
 	for(int i=0;i<x_list_len;i++)
 		primes_list[i] = hash_to_prime(x_list[i], 128, nonce_list[i])[0];
-	cpp_int product = calculate_product<cpp_int>(primes_list, x_list_len);
+	cpp_int product = calculate_product<cpp_int>(primes_list, 0, x_list_len-1);
 	return product;
 }
 
@@ -655,14 +786,100 @@ bool batch_verify_membership_with_NIPoE(cpp_int Q, int l_nonce, cpp_int u, cpp_i
 	return dunder_verify_exponentiation<cpp_int>(Q, l_nonce, u, product, w, n);	
 }
 
+void multi_thread_root_factor(int thread_part, cpp_int* result, cpp_int A0, cpp_int* primes, int len, cpp_int n){
+    int start = thread_part*(len/4);
+    int end = (thread_part+1)*(len/4)-1;
+
+
+
+    int mid =  start + (end-start)/2;
+    cpp_int product_rest;
+    if(end!=(len-1)){
+        product_rest = calculate_product<cpp_int>(primes, end+1, len-1); // Right rest
+        A0 = power<cpp_int>(A0, product_rest, n);
+    }
+    if(start!=0){
+        product_rest = calculate_product<cpp_int>(primes, 0, start-1); // Left rest
+        A0 = power<cpp_int>(A0, product_rest, n); 
+    }
+    if(start==end){
+        result[start] = A0;
+        return ;
+    }
+    if(end>start){
+        // tik = std::chrono::system_clock::now();
+        cpp_int product_L = calculate_product<cpp_int>(primes, start, mid);
+        cpp_int product_R = calculate_product<cpp_int>(primes, mid+1, end);
+        cpp_int g_L = power<cpp_int>(A0, product_L, n);
+        cpp_int g_R = power<cpp_int>(A0, product_R, n);
+
+        root_factor(result, g_R, primes, start, mid, n);
+        root_factor(result, g_L, primes, mid+1, end, n);
+    }
+}
+
 template<typename T>
 T* create_all_membership_witnesses(T A0, HashMapTable &S, T n, int &witnesses_list_len){
 	T* primes = new T[S.length];
 	cpp_int* key = S.keys();
+    std::chrono::time_point<std::chrono::system_clock> tik, tok;
+    // tik = std::chrono::system_clock::now();
 	for(int i=0;i<S.length;i++)
 		primes[i] = hash_to_prime(key[i], ACCUMULATED_PRIME_SIZE, S.SearchKey(key[i]))[0];
-	// printArray(primes)
-	return root_factor(A0, primes, S.length, n, witnesses_list_len);
+    // tok = std::chrono::system_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(tok - tik);
+    // std::cout << duration.count()*1e-6<< std::endl;
+	witnesses_list_len = S.length;
+	T* result = new T[witnesses_list_len];
+	// std::thread t1(root_factor, result, A0, primes, 0, (witnesses_list_len/4)-1, n);
+	// std::thread t2(root_factor, result, A0, primes, (witnesses_list_len/4), (witnesses_list_len/2)-1, n);
+	// std::thread t3(root_factor, result, A0, primes, (witnesses_list_len/2), (3*witnesses_list_len/4)-1, n);
+	// std::thread t4(root_factor, result, A0, primes, (3*witnesses_list_len/4), (witnesses_list_len)-1, n);
+
+	// t1.join();
+	// t2.join();
+	// t3.join();
+	// t4.join();
+
+	// root_factor(result, A0, primes, 0, S.length-1, n);
+    
+    
+    // int start = 0;
+    // int end = witnesses_list_len-1;
+    // if(start==end){
+    //     result[start] = A0;
+    //     return result;
+    // }
+    // int mid =  start + (end-start)/2;
+    // if(end>start){
+    //     // tik = std::chrono::system_clock::now();
+    //     cpp_int product_L = calculate_product<cpp_int>(primes, start, mid);
+    //     cpp_int product_R = calculate_product<cpp_int>(primes, mid+1, end);
+    //     cpp_int g_L = power<cpp_int>(A0, product_L, n);
+    //     cpp_int g_R = power<cpp_int>(A0, product_R, n);
+    //     // tok = std::chrono::system_clock::now();
+    //     // duration = std::chrono::duration_cast<std::chrono::microseconds>(tok - tik);
+    //     // std::cout << duration.count()*1e-6<< std::endl;
+    //     std::thread t1(root_factor, result, g_R, primes, start, mid, n);
+    //     std::thread t2(root_factor, result, g_L, primes, mid+1, end, n);
+
+    //     t1.join();
+    //     t2.join();
+    // }
+    // int NUMBER_OF_THREADS = 8;
+    std::thread t1(multi_thread_root_factor, 0, result, A0, primes, witnesses_list_len, n);
+    std::thread t2(multi_thread_root_factor, 1, result, A0, primes, witnesses_list_len, n);
+    std::thread t3(multi_thread_root_factor, 2, result, A0, primes, witnesses_list_len, n);
+    std::thread t4(multi_thread_root_factor, 3, result, A0, primes, witnesses_list_len, n);
+
+
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+
+
+	return result;
 }
 
 cpp_int* prove_non_membership(cpp_int A0, HashMapTable &S, cpp_int x, int x_nonce, cpp_int n){
