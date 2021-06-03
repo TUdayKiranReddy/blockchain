@@ -1,8 +1,3 @@
-
-
-
-//#include "functions.h"
-
 #include <iostream>
 #include <cstdlib>
 #include <vector>
@@ -21,8 +16,10 @@
 #include <boost/convert/stream.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <boost/random.hpp>
-// #include "sha256.h"
-#include <openssl/sha.h>
+// #include <openssl/sha.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/hex.h>
+#include <cryptopp/sha.h>
 
 using boost::convert;
 using namespace boost::multiprecision;
@@ -36,6 +33,8 @@ int RSA_KEY_SIZE  =2048;
 int ACCUMULATED_PRIME_SIZE= 128;
 int RSA_PRIME_SIZE = 1024;
 
+int THREADS_MAX = 4;
+int T_S = 1000;         // Hash table length
 
 std::string to_hex(unsigned char s) {
     std::stringstream ss;
@@ -43,18 +42,29 @@ std::string to_hex(unsigned char s) {
     return ss.str();
 }   
 
-std::string sha256(std::string line) {    
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_CTX sha256;
-    SHA256_Init(&sha256);
-    SHA256_Update(&sha256, line.c_str(), line.length());
-    SHA256_Final(hash, &sha256);
+// std::string sha256(std::string line) {                           // Open ssl SHA256
+//     unsigned char hash[SHA256_DIGEST_LENGTH];
+//     SHA256_CTX sha256;
+//     SHA256_Init(&sha256);
+//     SHA256_Update(&sha256, line.c_str(), line.length());
+//     SHA256_Final(hash, &sha256);
 
-    std::string output = "";    
-    for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        output += to_hex(hash[i]);
-    }
-    return output;
+//     std::string output = "";    
+//     for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+//         output += to_hex(hash[i]);
+//     }
+//     return output;
+// }
+
+std::string sha256(std::string message){                            // Crypto++ SHA256
+    CryptoPP::SHA256 hash;  
+    std::string digest;
+ 
+    CryptoPP::StringSource s(message, true,
+            new CryptoPP::HashFilter(hash,
+                new CryptoPP::HexEncoder(
+                    new CryptoPP::StringSink(digest))));
+    return digest;
 }
 
 template<typename T>
@@ -75,7 +85,7 @@ cpp_int randbelow(T ulim, T llim=0){
 }
 
 template<typename T>
-T power(T x, T y, T p)
+T power(T x, T y, T p)                      // Fast modular exponentiation
 {
     T res = 1; 
     x = x % p;  
@@ -300,7 +310,7 @@ T shamir_trick(T pi1, T pi2, T x1, T x2, T n){
     return pi;
 }
 
-int T_S = 1000;
+
 
 class HashTableEntry {
    public:
@@ -613,29 +623,58 @@ void root_factor(cpp_int* array, cpp_int g, cpp_int* primes, int start, int end,
 //  	return addarrays<cpp_int>(L, l_rfactor_len, R, r_rfactor_len);
 //  }
 
-void multi_thread_add(cpp_int &product, HashMapTable &S, int start, int end){
+void multi_thread_add(cpp_int &product, HashMapTable &S, cpp_int* x_list, int x_list_len, int j, int nthreads){
+    // int nthreads = std::min(x_list_len, THREADS_MAX);
     cpp_int* hash_prime_nonce;
-    for(int i=start;i<=end;i++){
-        if(S.SearchKey(x_list[i])==-1){
-            hash_prime_nonce = hash_to_prime<cpp_int>(x_list[i]);
-            S.Insert(x_list[i], int(hash_prime_nonce[1]));
-            product *= hash_prime_nonce[0];
+    int start = (j*x_list_len/nthreads);
+    int end = ((j+1)*x_list_len/nthreads)-1;
+    if(start<=end){
+        for(int i=start;i<=end;i++){
+            if(S.SearchKey(x_list[i])==-1){
+                hash_prime_nonce = hash_to_prime<cpp_int>(x_list[i]);
+                S.Insert(x_list[i], int(hash_prime_nonce[1]));
+                product *= hash_prime_nonce[0];
+            }
         }
     }
 }
 
-cpp_int* batch_add(cpp_int A_pre_add, HashMapTable &S, cpp_int* x_list, int x_list_len, cpp_int n){
-	cpp_int product = 1;
+// cpp_int* batch_add(cpp_int A_pre_add, HashMapTable &S, cpp_int* x_list, int x_list_len, cpp_int n){
+//     cpp_int product = 1;
+//     cpp_int* result = new cpp_int[3];
+//     for(int i =0;i<x_list_len;i++){
+//         if(S.SearchKey(x_list[i])==-1){
+//             cpp_int* hash_prime_nonce = hash_to_prime<cpp_int>(x_list[i]);
+//             S.Insert(x_list[i], int(hash_prime_nonce[1]));
+//             product *= hash_prime_nonce[0];
+//         }
+//     }
+//     cpp_int A_post_add = power<cpp_int>(A_pre_add, product, n);
+//     cpp_int* pe_result = prove_exponentiation(A_pre_add, product, A_post_add, n);
+//     result[0] = A_post_add;
+//     result[1] = pe_result[0];
+//     result[2] = pe_result[1];
+//     return result; 
+// }
+
+cpp_int* batch_add(cpp_int A_pre_add, HashMapTable &S, cpp_int* x_list, int x_list_len, cpp_int n){         // Multi Threaded
+    int threads_max = std::min(x_list_len, THREADS_MAX);
+	cpp_int product[threads_max] = {};
+    for(int j=0;j<threads_max;j++)
+        product[j]=1;
 	cpp_int* result = new cpp_int[3];
-	for(int i =0;i<x_list_len;i++){
-		if(S.SearchKey(x_list[i])==-1){
-			cpp_int* hash_prime_nonce = hash_to_prime<cpp_int>(x_list[i]);
-			S.Insert(x_list[i], int(hash_prime_nonce[1]));
-			product *= hash_prime_nonce[0];
-		}
-	}
-	cpp_int A_post_add = power<cpp_int>(A_pre_add, product, n);
-	cpp_int* pe_result = prove_exponentiation(A_pre_add, product, A_post_add, n);
+    std::thread t[threads_max];
+    for(int j=0;j<threads_max;j++){
+        t[j] =std::thread(multi_thread_add, std::ref(product[j]), std::ref(S), x_list, x_list_len, j, threads_max);
+    }
+
+    for(int j=0;j<threads_max;j++)
+        t[j].join();
+    for(int j=1;j<threads_max;j++)
+        product[0] *= product[j];
+
+	cpp_int A_post_add = power<cpp_int>(A_pre_add, product[0], n);
+	cpp_int* pe_result = prove_exponentiation(A_pre_add, product[0], A_post_add, n);
 	result[0] = A_post_add;
 	result[1] = pe_result[0];
 	result[2] = pe_result[1];
@@ -787,8 +826,8 @@ bool batch_verify_membership_with_NIPoE(cpp_int Q, int l_nonce, cpp_int u, cpp_i
 }
 
 void multi_thread_root_factor(int thread_part, cpp_int* result, cpp_int A0, cpp_int* primes, int len, cpp_int n){
-    int start = thread_part*(len/4);
-    int end = (thread_part+1)*(len/4)-1;
+    int start = (thread_part*len/THREADS_MAX);
+    int end = ((thread_part+1)*len/THREADS_MAX)-1;
 
 
 
@@ -867,16 +906,21 @@ T* create_all_membership_witnesses(T A0, HashMapTable &S, T n, int &witnesses_li
     //     t2.join();
     // }
     // int NUMBER_OF_THREADS = 8;
-    std::thread t1(multi_thread_root_factor, 0, result, A0, primes, witnesses_list_len, n);
-    std::thread t2(multi_thread_root_factor, 1, result, A0, primes, witnesses_list_len, n);
-    std::thread t3(multi_thread_root_factor, 2, result, A0, primes, witnesses_list_len, n);
-    std::thread t4(multi_thread_root_factor, 3, result, A0, primes, witnesses_list_len, n);
+    std::thread t[THREADS_MAX];
+    for(int j=0;j<THREADS_MAX;j++)
+        t[j] = std::thread(multi_thread_root_factor, j, result, A0, primes, witnesses_list_len, n);
+    for(int j=0;j<THREADS_MAX;j++)
+        t[j].join();
+    // std::thread t1(multi_thread_root_factor, 0, result, A0, primes, witnesses_list_len, n);
+    // std::thread t2(multi_thread_root_factor, 1, result, A0, primes, witnesses_list_len, n);
+    // std::thread t3(multi_thread_root_factor, 2, result, A0, primes, witnesses_list_len, n);
+    // std::thread t4(multi_thread_root_factor, 3, result, A0, primes, witnesses_list_len, n);
 
 
-    t1.join();
-    t2.join();
-    t3.join();
-    t4.join();
+    // t1.join();
+    // t2.join();
+    // t3.join();
+    // t4.join();
 
 
 	return result;
